@@ -4,12 +4,11 @@
   "description": "Yupoo Web Scraper",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "node server.js",
+    "build": "echo 'No build step required'"
   },
   "dependencies": {
-    "express": "^4.19.2",
-    "puppeteer-extra": "^3.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "puppeteer": "^22.10.0"
+    "express": "^4.19.2"
   }
 }

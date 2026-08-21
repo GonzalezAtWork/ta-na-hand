@@ -1,6 +1,6 @@
-const puppeteer = require('puppeteer-extra');
-const StealthPlugin = require('puppeteer-extra-plugin-stealth');
-puppeteer.use(StealthPlugin());
+// const puppeteer = require('puppeteer-extra');
+// const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+// puppeteer.use(StealthPlugin());
 const fs = require('fs');
 
 const lojas = {
@@ -223,14 +223,8 @@ class Scraper {
   }
 
   async iniciarPesquisa(palavrasChave, limiteRecentes, palavrasProibidas, totalLojas) {
-    this.emit('log', `🕷️ Iniciando Varredura Turbo (${MAX_ABAS_SIMULTANEAS} abas em ${totalLojas} Lojas)...`);
+    this.emit('log', `🕷️ Iniciando Varredura Turbo (Fetch) em ${totalLojas} Lojas...`);
     
-    this.browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined
-    });
-
     let tempoInicio = Date.now();
 
     const loopConsole = setInterval(() => {
@@ -257,7 +251,7 @@ class Scraper {
     await Promise.all(promessasWorkers);
 
     clearInterval(loopConsole);
-    if (this.browser) await this.browser.close();
+    // if (this.browser) await this.browser.close();
     
     if (this.albunsEncontrados.length > 0) {
       this.emit('log', '⏳ Organizando e traduzindo resultados para Português...');
@@ -286,13 +280,6 @@ class Scraper {
   }
 
   async workerAba(palavrasChave, palavrasProibidas) {
-    const page = await this.browser.newPage();
-    await page.setRequestInterception(true);
-    page.on('request', (req) => {
-      if (['image', 'stylesheet', 'font', 'media'].includes(req.resourceType())) req.abort();
-      else req.continue();
-    });
-
     while (!this.pausarExecucao) {
       if (this.filaDeTarefas.length === 0) {
         if (this.tarefasAtivas === 0) break;
@@ -307,23 +294,36 @@ class Scraper {
       const urlBusca = `${tarefa.urlBase}/search/album?uid=1&q=${encodeURIComponent(tarefa.keyword)}&page=${tarefa.pagina}`;
 
       try {
-        await page.goto(urlBusca, { waitUntil: 'domcontentloaded', timeout: 30000 });
-        const dadosPagina = await page.evaluate(() => {
-          const itens = Array.from(document.querySelectorAll('a.album__main'));
-          return itens.map(album => {
-            const imgEl = album.querySelector('img');
-            let coverUrl = '';
-            if (imgEl) {
-              coverUrl = imgEl.getAttribute('data-src') || imgEl.getAttribute('src') || '';
-              if (coverUrl.startsWith('//')) coverUrl = 'https:' + coverUrl;
-            }
-            return {
-              titulo: album.getAttribute('title') ? album.getAttribute('title').toLowerCase() : '',
-              link: album.getAttribute('href'),
-              capa: coverUrl
-            };
-          });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        const res = await fetch(urlBusca, { 
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+            },
+            signal: controller.signal
         });
+        clearTimeout(timeoutId);
+        
+        const html = await res.text();
+        const altRegex = /<a[^>]+class="album__main"[^>]*>[\s\S]*?<\/a>/g;
+        let dadosPagina = [];
+        let aMatch;
+        while ((aMatch = altRegex.exec(html)) !== null) {
+            const aHtml = aMatch[0];
+            const hrefMatch = aHtml.match(/href="([^"]+)"/);
+            const titleMatch = aHtml.match(/title="([^"]+)"/);
+            const imgMatch = aHtml.match(/<img[^>]+(?:data-src|src)="([^"]+)"/);
+            if (hrefMatch && titleMatch) {
+                let coverUrl = imgMatch ? imgMatch[1] : '';
+                if (coverUrl.startsWith('//')) coverUrl = 'https:' + coverUrl;
+                dadosPagina.push({
+                    titulo: titleMatch[1].toLowerCase(),
+                    link: hrefMatch[1],
+                    capa: coverUrl
+                });
+            }
+        }
 
         if (dadosPagina.length > 0) {
           this.filaDeTarefas.push({ urlBase: tarefa.urlBase, keyword: tarefa.keyword, pagina: tarefa.pagina + 1 });
@@ -360,7 +360,6 @@ class Scraper {
       this.tarefasAtivas--;
       this.paginasLidas++;
     }
-    await page.close();
   }
 }
 
