@@ -49,7 +49,7 @@ const lojas = {
   ]
 };
 
-const MAX_ABAS_SIMULTANEAS = 5;
+const MAX_ABAS_SIMULTANEAS = 2;
 
 const TERMOS_GENERICOS = new Set([
   'national', 'team', 'football', 'club', 'fc', 'rugby', 'union', 
@@ -227,7 +227,8 @@ class Scraper {
     
     this.browser = await puppeteer.launch({
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined
     });
 
     let tempoInicio = Date.now();
